@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Header Section -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1><i class="fas fa-chart-line me-3"></i>Crypto RSI & MACD Scanner</h1>
+                    <p class="text-muted mb-0">Combined technical analysis using RSI and MACD indicators</p>
+                </div>
+                <div class="text-end">
+                    <button class="btn btn-outline-primary" onclick="refreshData()" id="refreshBtn">
+                        <i class="fas fa-sync-alt me-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanner Form -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="/scan" id="scanForm">
+                        <div class="row align-items-end">
+                            <div class="col-md-6">
+                                <label for="symbols" class="form-label">
+                                    <i class="fas fa-coins me-2"></i>Cryptocurrency Symbols
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="symbols" 
+                                       name="symbols" 
+                                       value="{{ symbols or 'LINK' }}"
+                                       placeholder="LINK, BTC, ETH, XRP, SOL (comma-separated)"
+                                       required>
+                                <div class="form-text">Enter symbols separated by commas (e.g., LINK, BTC, ETH)</div>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label for="rsi_period" class="form-label">
+                                    <i class="fas fa-sliders-h me-2"></i>RSI Period
+                                </label>
+                                <select class="form-select" id="rsi_period" name="rsi_period">
+                                    <option value="14" {% if rsi_period == 14 %}selected{% endif %}>14 (Standard)</option>
+                                    <option value="21" {% if rsi_period == 21 %}selected{% endif %}>21</option>
+                                    <option value="9" {% if rsi_period == 9 %}selected{% endif %}>9 (Fast)</option>
+                                    <option value="25" {% if rsi_period == 25 %}selected{% endif %}>25 (Slow)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-primary w-100" id="scanBtn">
+                                    <i class="fas fa-search me-2"></i>Scan Crypto
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    {% if results %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6><i class="fas fa-info-circle me-2"></i>Signal Legend</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6 class="text-primary">RSI Signals:</h6>
+                            <ul class="list-unstyled small">
+                                <li><span class="badge bg-success me-2">Oversold</span> RSI < 30 (Buy opportunity)</li>
+                                <li><span class="badge bg-danger me-2">Overbought</span> RSI > 70 (Sell opportunity)</li>
+                                <li><span class="badge bg-secondary me-2">Neutral</span> 30 ≤ RSI ≤ 70</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-info">MACD Signals:</h6>
+                            <ul class="list-unstyled small">
+                                <li><span class="badge bg-success me-2">Bullish</span> MACD > Signal Line</li>
+                                <li><span class="badge bg-danger me-2">Bearish</span> MACD < Signal Line</li>
+                                <li><span class="badge bg-secondary me-2">Neutral</span> Crossing or flat</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-warning">Combined Signals:</h6>
+                            <ul class="list-unstyled small">
+                                <li><span class="badge bg-success me-2">Strong Buy</span> RSI Oversold + MACD Bullish</li>
+                                <li><span class="badge bg-danger me-2">Strong Sell</span> RSI Overbought + MACD Bearish</li>
+                                <li><span class="badge bg-info me-2">Buy/Sell</span> One indicator favorable</li>
+                                <li><span class="badge bg-secondary me-2">Hold</span> Neutral signals</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Results Table -->
+    {% if results %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-table me-2"></i>Analysis Results 
+                        <span class="badge bg-primary">{{ results|length }} coins</span>
+                        {% if is_popular %}<span class="badge bg-info ms-2">Popular</span>{% endif %}
+                    </h5>
+                    <small class="text-muted">
+                        <i class="fas fa-clock me-1"></i>
+                        Last updated: <span id="lastUpdate">{{ results[0].timestamp if results else 'Never' }}</span>
+                    </small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th><i class="fas fa-coins me-1"></i>Symbol</th>
+                                    <th><i class="fas fa-dollar-sign me-1"></i>Price</th>
+                                    <th><i class="fas fa-percentage me-1"></i>24h Change</th>
+                                    <th><i class="fas fa-chart-line me-1"></i>RSI ({{ rsi_period or 14 }})</th>
+                                    <th><i class="fas fa-signal me-1"></i>MACD</th>
+                                    <th><i class="fas fa-chart-bar me-1"></i>Histogram</th>
+                                    <th><i class="fas fa-flag me-1"></i>Combined Signal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ result.symbol }}</strong>
+                                    </td>
+                                    <td>
+                                        ${{ "%.4f"|format(result.price) if result.price < 1 else "%.2f"|format(result.price) }}
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if result.change_24h > 0 %}bg-success{% elif result.change_24h < 0 %}bg-danger{% else %}bg-secondary{% endif %}">
+                                            {% if result.change_24h > 0 %}+{% endif %}{{ "%.2f"|format(result.change_24h) }}%
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <span class="me-2"><strong>{{ result.rsi }}</strong></span>
+                                            <span class="badge {% if result.rsi_signal == 'Oversold' %}bg-success{% elif result.rsi_signal == 'Overbought' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                                {{ result.rsi_signal }}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="small">
+                                            <div>MACD: {{ "%.6f"|format(result.macd_line) }}</div>
+                                            <div class="text-muted">Signal: {{ "%.6f"|format(result.signal_line) }}</div>
+                                        </div>
+                                        <span class="badge {% if result.macd_signal == 'Bullish' %}bg-success{% elif result.macd_signal == 'Bearish' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                            {{ result.macd_signal }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="{% if result.histogram > 0 %}text-success{% elif result.histogram < 0 %}text-danger{% else %}text-secondary{% endif %}">
+                                            {{ "%.6f"|format(result.histogram) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if result.combined_signal == 'Strong Buy' %}bg-success
+                                            {% elif result.combined_signal == 'Strong Sell' %}bg-danger
+                                            {% elif result.combined_signal == 'Buy' %}bg-success bg-opacity-75
+                                            {% elif result.combined_signal == 'Sell' %}bg-danger bg-opacity-75
+                                            {% else %}bg-secondary
+                                            {% endif %}">
+                                            {% if result.combined_signal == 'Strong Buy' %}
+                                                <i class="fas fa-arrow-up me-1"></i>
+                                            {% elif result.combined_signal == 'Strong Sell' %}
+                                                <i class="fas fa-arrow-down me-1"></i>
+                                            {% elif result.combined_signal == 'Buy' %}
+                                                <i class="fas fa-caret-up me-1"></i>
+                                            {% elif result.combined_signal == 'Sell' %}
+                                                <i class="fas fa-caret-down me-1"></i>
+                                            {% else %}
+                                                <i class="fas fa-minus me-1"></i>
+                                            {% endif %}
+                                            {{ result.combined_signal }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Empty State -->
+    {% if not results %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-chart-line fa-5x text-muted"></i>
+                </div>
+                <h3 class="text-muted">Start Your Analysis</h3>
+                <p class="text-muted">Enter cryptocurrency symbols above to begin RSI and MACD analysis</p>
+                <div class="mt-4">
+                    <a href="/popular" class="btn btn-primary">
+                        <i class="fas fa-star me-2"></i>Analyze Popular Coins
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h6>Scanning Cryptocurrencies...</h6>
+                <p class="text-muted mb-0">Calculating RSI and MACD indicators</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh functionality
+    function refreshData() {
+        const form = document.getElementById('scanForm');
+        const symbols = document.getElementById('symbols').value;
+        
+        if (symbols.trim()) {
+            showLoading();
+            form.submit();
+        } else {
+            alert('Please enter cryptocurrency symbols first');
+        }
+    }
+    
+    function showLoading() {
+        const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+        modal.show();
+    }
+    
+    // Show loading on form submit
+    document.getElementById('scanForm').addEventListener('submit', function() {
+        showLoading();
+    });
+    
+    // Auto-refresh every 5 minutes if results are shown
+    {% if results %}
+    setInterval(function() {
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn && document.getElementById('symbols').value.trim()) {
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin me-2"></i>Auto-refresh';
+            setTimeout(() => {
+                refreshData();
+            }, 1000);
+        }
+    }, 300000); // 5 minutes
+    {% endif %}
+    
+    // Update last update time
+    function updateLastUpdateTime() {
+        const now = new Date();
+        document.getElementById('lastUpdate').textContent = now.toLocaleString();
+    }
+</script>
+{% endblock %}
